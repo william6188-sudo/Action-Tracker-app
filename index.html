@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Track meeting actions by owner and due date. Data stays in your browser.">
+<style>
+:root{color-scheme:light}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+<title>Action Tracker</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Schibsted+Grotesk:wght@600;700&display=swap">
+<style>
+/* Layout: one calm column. Summary strip, add form, then one card per owner in a responsive grid. */
+:root {
+  --bg: #F1F3F1;
+  --card: #FFFFFF;
+  --ink: #22282B;
+  --muted: #667075;
+  --line: #E0E5E2;
+  --soft: #F6F8F6;
+  --accent: #E8702A;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #FCEBDD;
+  --overdue: #C23B2E;
+  --overdue-soft: #FBE9E6;
+  --done: #8A9499;
+  --shadow: 0 1px 2px rgba(34, 40, 43, .05), 0 6px 18px rgba(34, 40, 43, .04);
+  --font-display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141819; --card: #1D2224; --ink: #ECEFEE; --muted: #9AA5A9; --line: #2B3235; --soft: #232A2C;
+    --accent: #F28A4B; --accent-ink: #1A1109; --accent-soft: #3A2A1F;
+    --overdue: #F07468; --overdue-soft: #3B2523; --done: #6F797E;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141819; --card: #1D2224; --ink: #ECEFEE; --muted: #9AA5A9; --line: #2B3235; --soft: #232A2C;
+  --accent: #F28A4B; --accent-ink: #1A1109; --accent-soft: #3A2A1F;
+  --overdue: #F07468; --overdue-soft: #3B2523; --done: #6F797E;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 6px 18px rgba(0, 0, 0, .25);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 1.45;
+  padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
+h1 { font-family: var(--font-display); font-size: 2.1rem; line-height: 1.1; margin: 0; letter-spacing: -.01em; text-wrap: balance; }
+.today { color: var(--muted); font-size: 1rem; }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+
+/* Summary */
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.stat { padding: 18px 20px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stat .n { font-family: var(--font-display); font-size: 2.6rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.stat .l { color: var(--muted); font-size: 1rem; }
+.stat.open .n { color: var(--accent); }
+.stat.overdue.has .n { color: var(--overdue); }
+.stat.overdue.has { background: var(--overdue-soft); border-color: transparent; }
+
+/* Form */
+form.add { padding: 20px; display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr) minmax(0, 1fr) auto; gap: 14px; align-items: end; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field label { font-size: .85rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+input[type="text"], input[type="date"] {
+  font: inherit; color: var(--ink); background: var(--soft);
+  border: 1.5px solid var(--line); border-radius: 12px;
+  padding: 12px 14px; min-height: 52px; width: 100%; min-width: 0;
+}
+input::placeholder { color: var(--muted); opacity: .8; }
+input:focus-visible, button:focus-visible, .tick:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+input:focus-visible { border-color: var(--accent); outline-offset: 0; }
+.btn {
+  font: inherit; font-weight: 600; cursor: pointer;
+  background: var(--accent); color: var(--accent-ink);
+  border: 0; border-radius: 12px; min-height: 52px; padding: 0 26px;
+}
+.btn:hover { filter: brightness(.95); }
+.btn:active { transform: translateY(1px); }
+.msg { grid-column: 1 / -1; color: var(--overdue); font-size: .95rem; min-height: 0; margin: -4px 0 0; }
+.msg:empty { display: none; }
+
+/* Example banner */
+.banner { padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; background: var(--accent-soft); border-color: transparent; box-shadow: none; font-size: 1rem; }
+.link { font: inherit; font-weight: 600; background: none; border: 0; padding: 6px 2px; cursor: pointer; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Controls */
+.bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; }
+.bar h2 { margin: 0; font-family: var(--font-display); font-size: 1.3rem; }
+.toggle { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-size: 1rem; color: var(--muted); user-select: none; min-height: 44px; }
+.toggle input { width: 22px; height: 22px; accent-color: var(--accent); margin: 0; }
+
+/* Owner cards */
+.groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 16px; align-items: start; }
+.group { padding: 20px 20px 10px; min-width: 0; }
+.ghead { display: flex; align-items: center; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.avatar { flex: none; width: 44px; height: 44px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; }
+.gname { min-width: 0; flex: 1; }
+.gname strong { display: block; font-family: var(--font-display); font-size: 1.25rem; line-height: 1.2; overflow-wrap: anywhere; }
+.gname span { color: var(--muted); font-size: .95rem; }
+.pill { flex: none; background: var(--overdue-soft); color: var(--overdue); font-weight: 700; font-size: .85rem; padding: 4px 10px; border-radius: 999px; }
+
+ul { list-style: none; margin: 0; padding: 0; }
+.item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.item:last-child { border-bottom: 0; }
+.tick {
+  appearance: none; -webkit-appearance: none; margin: 2px 0 0; cursor: pointer;
+  width: 28px; height: 28px; border-radius: 8px; border: 2px solid var(--muted); background: var(--card);
+  display: grid; place-items: center; flex: none;
+}
+.tick:hover { border-color: var(--accent); }
+.tick:checked { background: var(--accent); border-color: var(--accent); }
+.tick:checked::after { content: ""; width: 7px; height: 13px; border: solid var(--accent-ink); border-width: 0 3px 3px 0; transform: translateY(-1px) rotate(45deg); }
+.item.late .tick:not(:checked) { border-color: var(--overdue); }
+.what { font-size: 1.1rem; font-weight: 500; overflow-wrap: anywhere; }
+.when { font-size: .95rem; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.item.late .when { color: var(--overdue); font-weight: 600; }
+.item.late .what { color: var(--ink); }
+.item.done .what { color: var(--done); text-decoration: line-through; text-decoration-thickness: 1.5px; }
+.item.done .when { color: var(--done); }
+.del { font: inherit; font-size: 1.4rem; line-height: 1; width: 36px; height: 36px; border-radius: 10px; border: 0; background: none; color: var(--muted); cursor: pointer; opacity: .55; }
+.del:hover { opacity: 1; background: var(--soft); color: var(--overdue); }
+
+.empty { padding: 36px 24px; text-align: center; color: var(--muted); }
+.empty strong { display: block; color: var(--ink); font-family: var(--font-display); font-size: 1.3rem; margin-bottom: 4px; }
+
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 12px 14px 12px 18px; border-radius: 14px; display: flex; align-items: center; gap: 14px; font-size: 1rem; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+.toast .link { color: var(--accent); }
+
+@media (max-width: 760px) {
+  body { padding-block: 24px 64px; font-size: 17px; }
+  h1 { font-size: 1.8rem; }
+  form.add { grid-template-columns: 1fr 1fr; }
+  form.add .field.wide { grid-column: 1 / -1; }
+  form.add .btn { grid-column: 1 / -1; }
+  .stat { padding: 14px; }
+  .stat .n { font-size: 2.1rem; }
+}
+@media (max-width: 420px) {
+  form.add { grid-template-columns: 1fr; }
+  .stat .l { font-size: .9rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Action Tracker</h1>
+    <div class="today" id="today"></div>
+  </header>
+
+  <section class="stats" aria-label="Summary">
+    <div class="card stat open"><span class="n" id="nOpen">0</span><span class="l">Open</span></div>
+    <div class="card stat done"><span class="n" id="nDone">0</span><span class="l">Done</span></div>
+    <div class="card stat overdue" id="statOverdue"><span class="n" id="nOver">0</span><span class="l">Overdue</span></div>
+  </section>
+
+  <form class="card add" id="addForm" novalidate>
+    <div class="field wide">
+      <label for="what">Action</label>
+      <input type="text" id="what" placeholder="Send revised budget to finance" autocomplete="off" maxlength="200">
+    </div>
+    <div class="field">
+      <label for="owner">Owner</label>
+      <input type="text" id="owner" list="owners" placeholder="Name" autocomplete="off" maxlength="40">
+      <datalist id="owners"></datalist>
+    </div>
+    <div class="field">
+      <label for="due">Due date</label>
+      <input type="date" id="due">
+    </div>
+    <button class="btn" type="submit">Add action</button>
+    <p class="msg" id="msg" role="alert"></p>
+  </form>
+
+  <div class="card banner" id="banner" hidden>
+    <span>These are example actions so you can see how it works.</span>
+    <button class="link" type="button" id="clearEx">Clear examples</button>
+  </div>
+
+  <div class="bar">
+    <h2>By owner</h2>
+    <label class="toggle" for="showDone"><input type="checkbox" id="showDone"> Show completed</label>
+  </div>
+
+  <main class="groups" id="groups"></main>
+</div>
+
+<div class="toast" id="toast" hidden role="status">
+  <span id="toastText"></span>
+  <button class="link" type="button" id="undo">Undo</button>
+</div>
+
+<script>
+(function () {
+  var KEY = 'meeting-action-tracker-v1';
+  var state = { items: [], showDone: true };
+  var firstRun = true;
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(KEY);
+      if (raw) {
+        var d = JSON.parse(raw);
+        if (d && Array.isArray(d.items)) {
+          state.items = d.items;
+          state.showDone = d.showDone !== false;
+          firstRun = false;
+        }
+      }
+    } catch (e) {}
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+  }
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function todayISO() { return iso(new Date()); }
+  function plusDays(n) { var d = new Date(); d.setDate(d.getDate() + n); return iso(d); }
+  function diffDays(a, b) {
+    var x = a.split('-').map(Number), y = b.split('-').map(Number);
+    return Math.round((Date.UTC(y[0], y[1] - 1, y[2]) - Date.UTC(x[0], x[1] - 1, x[2])) / 864e5);
+  }
+  function niceDate(s) {
+    var p = s.split('-').map(Number);
+    return new Date(p[0], p[1] - 1, p[2]).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+  function isOverdue(it) { return !it.done && diffDays(todayISO(), it.due) < 0; }
+
+  function dueText(it) {
+    if (it.done) return 'Done · was due ' + niceDate(it.due);
+    var d = diffDays(todayISO(), it.due);
+    if (d < 0) return (-d) + (d === -1 ? ' day' : ' days') + ' overdue · ' + niceDate(it.due);
+    if (d === 0) return 'Due today';
+    if (d === 1) return 'Due tomorrow';
+    return 'Due ' + niceDate(it.due);
+  }
+
+  function seed() {
+    var ex = [
+      ['Send revised budget to finance', 'Priya', -3, false],
+      ['Book venue for the Q4 offsite', 'Priya', 4, false],
+      ['Share the customer interview notes', 'Priya', -6, true],
+      ['Fix the checkout timeout bug', 'Marcus', -1, false],
+      ['Draft the release announcement', 'Marcus', 0, false],
+      ['Review vendor contract with legal', 'Lena', 2, false],
+      ['Update the onboarding checklist', 'Lena', 9, false]
+    ];
+    state.items = ex.map(function (e) {
+      return { id: uid(), what: e[0], owner: e[1], due: plusDays(e[2]), done: e[3], example: true };
+    });
+    save();
+  }
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function render() {
+    var t = todayISO();
+    $('today').textContent = 'Today is ' + new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
+    var open = 0, done = 0, over = 0;
+    state.items.forEach(function (it) {
+      if (it.done) done++; else open++;
+      if (isOverdue(it)) over++;
+    });
+    $('nOpen').textContent = open;
+    $('nDone').textContent = done;
+    $('nOver').textContent = over;
+    $('statOverdue').classList.toggle('has', over > 0);
+    $('showDone').checked = state.showDone;
+    $('banner').hidden = !state.items.some(function (i) { return i.example; });
+
+    // owners
+    var map = {}, order = [];
+    state.items.forEach(function (it) {
+      var k = it.owner.trim().toLowerCase();
+      if (!map[k]) { map[k] = { name: it.owner.trim(), items: [] }; order.push(k); }
+      map[k].items.push(it);
+    });
+    order.sort(function (a, b) { return map[a].name.localeCompare(map[b].name); });
+    $('owners').innerHTML = order.map(function (k) { return '<option value="' + esc(map[k].name) + '">'; }).join('');
+
+    var box = $('groups');
+    if (!state.items.length) {
+      box.innerHTML = '<div class="card empty" style="grid-column:1/-1"><strong>No actions yet</strong>Add the first one above while the meeting is still fresh.</div>';
+      return;
+    }
+
+    box.innerHTML = order.map(function (k) {
+      var g = map[k];
+      var o = g.items.filter(function (i) { return !i.done; }).length;
+      var d = g.items.length - o;
+      var late = g.items.filter(isOverdue).length;
+      var list = g.items.slice().sort(function (a, b) {
+        if (a.done !== b.done) return a.done ? 1 : -1;
+        return a.due.localeCompare(b.due);
+      }).filter(function (i) { return state.showDone || !i.done; });
+
+      var rows = list.map(function (it) {
+        var cls = 'item' + (it.done ? ' done' : '') + (isOverdue(it) ? ' late' : '');
+        return '<li class="' + cls + '" data-id="' + it.id + '">' +
+          '<input type="checkbox" class="tick" aria-label="Mark done: ' + esc(it.what) + '"' + (it.done ? ' checked' : '') + '>' +
+          '<div><div class="what">' + esc(it.what) + '</div><div class="when">' + esc(dueText(it)) + '</div></div>' +
+          '<button class="del" type="button" aria-label="Delete action" title="Delete">&times;</button></li>';
+      }).join('');
+      if (!rows) rows = '<li class="item"><div></div><div class="when">All done here.</div></li>';
+
+      return '<section class="card group"><div class="ghead">' +
+        '<div class="avatar" aria-hidden="true">' + esc(g.name.charAt(0).toUpperCase()) + '</div>' +
+        '<div class="gname"><strong>' + esc(g.name) + '</strong><span>' + o + ' open · ' + d + ' done</span></div>' +
+        (late ? '<span class="pill">' + late + ' overdue</span>' : '') +
+        '</div><ul>' + rows + '</ul></section>';
+    }).join('');
+  }
+
+  // Events
+  $('addForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var what = $('what').value.trim(), owner = $('owner').value.trim(), due = $('due').value;
+    var msg = $('msg');
+    if (!what) { msg.textContent = 'Write down what needs to happen.'; $('what').focus(); return; }
+    if (!owner) { msg.textContent = 'Say who owns this action.'; $('owner').focus(); return; }
+    if (!due) { msg.textContent = 'Pick a due date.'; $('due').focus(); return; }
+    msg.textContent = '';
+    state.items.push({ id: uid(), what: what, owner: owner, due: due, done: false });
+    save();
+    $('what').value = '';
+    $('what').focus();
+    render();
+  });
+
+  $('groups').addEventListener('change', function (e) {
+    if (!e.target.classList.contains('tick')) return;
+    var li = e.target.closest('li');
+    var it = state.items.find(function (i) { return i.id === li.dataset.id; });
+    if (it) { it.done = e.target.checked; save(); render(); }
+  });
+
+  var lastDeleted = null, toastTimer = null;
+  $('groups').addEventListener('click', function (e) {
+    var b = e.target.closest('.del');
+    if (!b) return;
+    var id = b.closest('li').dataset.id;
+    var idx = state.items.findIndex(function (i) { return i.id === id; });
+    if (idx < 0) return;
+    lastDeleted = { item: state.items[idx], idx: idx };
+    state.items.splice(idx, 1);
+    save(); render();
+    $('toastText').textContent = 'Action deleted';
+    $('toast').hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { $('toast').hidden = true; lastDeleted = null; }, 6000);
+  });
+  $('undo').addEventListener('click', function () {
+    if (!lastDeleted) return;
+    state.items.splice(Math.min(lastDeleted.idx, state.items.length), 0, lastDeleted.item);
+    lastDeleted = null;
+    $('toast').hidden = true;
+    save(); render();
+  });
+
+  $('showDone').addEventListener('change', function (e) { state.showDone = e.target.checked; save(); render(); });
+  $('clearEx').addEventListener('click', function () {
+    state.items = state.items.filter(function (i) { return !i.example; });
+    save(); render();
+  });
+
+  // Refresh overdue status when the tab comes back (e.g. the next morning)
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) render(); });
+
+  load();
+  if (firstRun) seed();
+  $('due').value = plusDays(7);
+  render();
+})();
+</script>
+</body>
+</html>
